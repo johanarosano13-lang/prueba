@@ -1,0 +1,47 @@
+name: EMA alerts
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_telegram:
+        description: "Enviar un mensaje de prueba a Telegram"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ccxt yfinance pandas requests
+
+      - name: Probar Telegram
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_telegram }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python ema_alert_bot.py --test-telegram
+
+      - name: Correr bot
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_telegram) }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python ema_alert_bot.py --once
+
+      - name: Guardar estado
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_telegram) }}
+        run: |
+          git config user.name "ema-bot"
+          git config user.email "ema-bot@users.noreply.github.com"
+          git add alert_state.json
+          git diff --cached --quiet || (git commit -m "update state" && git push)
